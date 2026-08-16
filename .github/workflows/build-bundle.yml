@@ -61,8 +61,8 @@ jobs:
         run: |
           MODEL_ID="${{ github.event.inputs.model_id }}"
           # Cactus-Compute repos ship only CQ weights; the converter loads the
-          # stock google/... model for graph capture, weights come from the CQ dir.
-          python scripts/transpile_bundle.py /tmp/weights /tmp/bundle --model-id "$MODEL_ID" --source-model "google/gemma-3-270m-it" 2>&1 | tail -30
+          # stock Qwen/Qwen3-0.6B model for graph capture, weights come from the CQ dir.
+          python scripts/transpile_bundle.py /tmp/weights /tmp/bundle --model-id "$MODEL_ID" --source-model "Qwen/Qwen3-0.6B" 2>&1 | tail -30
           echo "Bundle contents:"
           ls -la /tmp/bundle/
           test -f /tmp/bundle/components/manifest.json && echo "✓ manifest.json present" || echo "✗ manifest.json MISSING"
