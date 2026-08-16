@@ -1,0 +1,73 @@
+name: Build Cactus Model Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_id:
+        description: 'HuggingFace model id to convert (e.g. Cactus-Compute/gemma-3-270m-it)'
+        required: true
+        default: 'Cactus-Compute/gemma-3-270m-it'
+      bits:
+        description: 'Quantization bits (4 or 8)'
+        required: false
+        default: '4'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Cactus Python package with convert deps
+        run: |
+          cd python
+          pip install -e ".[convert]"
+
+      - name: Convert model to Cactus bundle
+        id: convert
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          MODEL_ID="${{ github.event.inputs.model_id }}"
+          BITS="${{ github.event.inputs.bits }}"
+          # model name for output dir
+          NAME=$(echo "$MODEL_ID" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
+          echo "Converting $MODEL_ID at $BITS bits..."
+          cactus convert "$MODEL_ID" --bits "$BITS" --artifact-dir "/tmp/bundle" 2>&1 | tail -40
+          echo "Bundle dir contents:"
+          ls -la /tmp/bundle/
+          echo "Checking manifest:"
+          test -f /tmp/bundle/components/manifest.json && echo "✓ manifest.json present" || echo "✗ manifest.json MISSING"
+          test -f /tmp/bundle/runtime_plan.json && echo "✓ runtime_plan.json present" || echo "✗ runtime_plan.json MISSING"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "bits=$BITS" >> "$GITHUB_OUTPUT"
+
+      - name: Package bundle as zip
+        run: |
+          cd /tmp
+          NAME="${{ steps.convert.outputs.name }}"
+          BITS="${{ steps.convert.outputs.bits }}"
+          # zip the bundle contents (config.txt at zip root)
+          cd /tmp/bundle
+          zip -r "/tmp/${NAME}-cq${BITS}.zip" . -x "transpiler_ir/*"
+          ls -lh "/tmp/${NAME}-cq${BITS}.zip"
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cactus-bundle-${{ steps.convert.outputs.name }}-cq${{ steps.convert.outputs.bits }}
+          path: /tmp/${{ steps.convert.outputs.name }}-cq${{ steps.convert.outputs.bits }}.zip
+          if-no-files-found: error
