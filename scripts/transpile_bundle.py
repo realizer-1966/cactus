@@ -33,7 +33,7 @@ def main() -> int:
     print(f"Transpiling {args.model_id} from {weights_dir} -> {output_dir}")
     try:
         build_transpiled_bundle(
-            args.model_id,
+            str(weights_dir),  # model_id: local path so converter uses local tokenizer
             weights_dir=weights_dir,
             output_dir=output_dir,
             profile_model_id=args.model_id,
