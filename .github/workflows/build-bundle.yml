@@ -36,6 +36,14 @@ jobs:
           cd python
           pip install -e ".[convert]"
 
+      - name: Build Cactus Python FFI library
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake build-essential libcurl4-openssl-dev
+          cd python
+          cactus build --python 2>&1 | tail -20
+          # Verify the shared lib exists
+          find . -name "libcactus_engine.so" 2>/dev/null | head
+
       - name: Download CQ weights archive
         id: download
         env:
@@ -59,6 +67,7 @@ jobs:
       - name: Transpile into runnable bundle
         id: transpile
         run: |
+          set -o pipefail
           MODEL_ID="${{ github.event.inputs.model_id }}"
           # Cactus-Compute repos ship only CQ weights; the converter loads the
           # stock Qwen/Qwen3-0.6B model for graph capture, weights come from the CQ dir.
