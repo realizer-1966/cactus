@@ -35,3 +35,8 @@ site_docs/
 TODO.md
 explain.md
 python/cactus/code/
+
+# Local build/download artifacts (not source)
+apk/
+bundle-artifact/
+*.zip
