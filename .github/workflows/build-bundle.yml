@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       model_id:
-        description: 'HuggingFace model id to convert (e.g. Cactus-Compute/gemma-3-270m-it)'
+        description: 'HuggingFace model id (e.g. Cactus-Compute/gemma-3-270m-it)'
         required: true
         default: 'Cactus-Compute/gemma-3-270m-it'
       bits:
@@ -36,31 +36,39 @@ jobs:
           cd python
           pip install -e ".[convert]"
 
-      - name: Convert model to Cactus bundle
-        id: convert
+      - name: Download CQ weights archive
+        id: download
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           MODEL_ID="${{ github.event.inputs.model_id }}"
           BITS="${{ github.event.inputs.bits }}"
-          # model name for output dir
           NAME=$(echo "$MODEL_ID" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
-          echo "Converting $MODEL_ID at $BITS bits..."
-          cactus convert "$MODEL_ID" --bits "$BITS" --skip-model-load --artifact-dir "/tmp/bundle" 2>&1 | tail -40
-          echo "Bundle dir contents:"
-          ls -la /tmp/bundle/
-          echo "Checking manifest:"
-          test -f /tmp/bundle/components/manifest.json && echo "✓ manifest.json present" || echo "✗ manifest.json MISSING"
-          test -f /tmp/bundle/runtime_plan.json && echo "✓ runtime_plan.json present" || echo "✗ runtime_plan.json MISSING"
+          echo "Downloading $MODEL_ID weights (cq$BITS)..."
+          curl -sSL -o /tmp/weights.zip \
+            "https://huggingface.co/$MODEL_ID/resolve/main/weights/$NAME-int$BITS.zip"
+          ls -lh /tmp/weights.zip
+          mkdir -p /tmp/weights
+          cd /tmp/weights
+          unzip -q /tmp/weights.zip
+          echo "Extracted files: $(ls | wc -l)"
+          test -f config.txt && echo "✓ config.txt present" || echo "✗ config.txt MISSING"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "bits=$BITS" >> "$GITHUB_OUTPUT"
 
+      - name: Transpile into runnable bundle
+        id: transpile
+        run: |
+          MODEL_ID="${{ github.event.inputs.model_id }}"
+          python scripts/transpile_bundle.py /tmp/weights /tmp/bundle --model-id "$MODEL_ID" 2>&1 | tail -30
+          echo "Bundle contents:"
+          ls -la /tmp/bundle/
+          test -f /tmp/bundle/components/manifest.json && echo "✓ manifest.json present" || echo "✗ manifest.json MISSING"
+
       - name: Package bundle as zip
         run: |
-          cd /tmp
-          NAME="${{ steps.convert.outputs.name }}"
-          BITS="${{ steps.convert.outputs.bits }}"
-          # zip the bundle contents (config.txt at zip root)
+          NAME="${{ steps.download.outputs.name }}"
+          BITS="${{ steps.download.outputs.bits }}"
           cd /tmp/bundle
           zip -r "/tmp/${NAME}-cq${BITS}.zip" . -x "transpiler_ir/*"
           ls -lh "/tmp/${NAME}-cq${BITS}.zip"
@@ -68,6 +76,6 @@ jobs:
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cactus-bundle-${{ steps.convert.outputs.name }}-cq${{ steps.convert.outputs.bits }}
-          path: /tmp/${{ steps.convert.outputs.name }}-cq${{ steps.convert.outputs.bits }}.zip
+          name: cactus-bundle-${{ steps.download.outputs.name }}-cq${{ steps.download.outputs.bits }}
+          path: /tmp/${{ steps.download.outputs.name }}-cq${{ steps.download.outputs.bits }}.zip
           if-no-files-found: error
