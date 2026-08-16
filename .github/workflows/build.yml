@@ -36,6 +36,14 @@ jobs:
       - run: bash cactus-engine/build.sh
       - run: BUILD_STATIC=true BUILD_XCFRAMEWORK=false bash apple/build.sh
       - run: bash android/build.sh
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cactus-android-arm64
+          path: |
+            android/libcactus_engine.so
+            android/libcactus_engine.a
+          if-no-files-found: error
 
   linux:
     runs-on: ubuntu-24.04-arm
