@@ -17,6 +17,10 @@ def main() -> int:
     ap.add_argument("output_dir", help="Where to write the runnable bundle")
     ap.add_argument("--model-id", default="Cactus-Compute/gemma-3-270m-it",
                     help="Model id used for the transpile profile")
+    ap.add_argument("--source-model", default=None,
+                    help="Original HF model id the converter loads for graph capture "
+                         "(defaults to --model-id). Use the stock google/... id when the "
+                         "Cactus repo only ships CQ weights.")
     args = ap.parse_args()
 
     weights_dir = Path(args.weights_dir).expanduser()
@@ -31,9 +35,10 @@ def main() -> int:
     from cactus.cli.transpiler import build_transpiled_bundle
 
     print(f"Transpiling {args.model_id} from {weights_dir} -> {output_dir}")
+    source_model = args.source_model or args.model_id
     try:
         build_transpiled_bundle(
-            str(weights_dir),  # model_id: local path so converter uses local tokenizer
+            source_model,  # converter loads this for graph capture
             weights_dir=weights_dir,
             output_dir=output_dir,
             profile_model_id=args.model_id,
