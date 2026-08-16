@@ -46,7 +46,7 @@ jobs:
           # model name for output dir
           NAME=$(echo "$MODEL_ID" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
           echo "Converting $MODEL_ID at $BITS bits..."
-          cactus convert "$MODEL_ID" --bits "$BITS" --artifact-dir "/tmp/bundle" 2>&1 | tail -40
+          cactus convert "$MODEL_ID" --bits "$BITS" --skip-model-load --artifact-dir "/tmp/bundle" 2>&1 | tail -40
           echo "Bundle dir contents:"
           ls -la /tmp/bundle/
           echo "Checking manifest:"
