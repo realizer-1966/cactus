@@ -11,6 +11,10 @@ on:
         description: 'Quantization bits (4 or 8)'
         required: false
         default: '4'
+      source_model:
+        description: 'Stock HF model id the converter loads for graph capture (e.g. Qwen/Qwen3-0.6B)'
+        required: false
+        default: 'Qwen/Qwen3-0.6B'
 
 permissions:
   contents: write
@@ -51,16 +55,20 @@ jobs:
         run: |
           MODEL_ID="${{ github.event.inputs.model_id }}"
           BITS="${{ github.event.inputs.bits }}"
+          # Use the -cq repo which ships weights_manifest.json (needed by transpile).
+          # L1.zip contains all weights + the manifest.
+          CQ_REPO="${MODEL_ID}-cq"
           NAME=$(echo "$MODEL_ID" | awk -F/ '{print $NF}' | tr '[:upper:]' '[:lower:]')
-          echo "Downloading $MODEL_ID weights (cq$BITS)..."
+          echo "Downloading $CQ_REPO L1.zip..."
           curl -sSL -o /tmp/weights.zip \
-            "https://huggingface.co/$MODEL_ID/resolve/main/weights/$NAME-int$BITS.zip"
+            "https://huggingface.co/$CQ_REPO/resolve/main/L1.zip"
           ls -lh /tmp/weights.zip
           mkdir -p /tmp/weights
           cd /tmp/weights
           unzip -q /tmp/weights.zip
           echo "Extracted files: $(ls | wc -l)"
           test -f config.txt && echo "✓ config.txt present" || echo "✗ config.txt MISSING"
+          test -f weights_manifest.json && echo "✓ weights_manifest.json present" || echo "✗ weights_manifest.json MISSING"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "bits=$BITS" >> "$GITHUB_OUTPUT"
 
@@ -69,9 +77,10 @@ jobs:
         run: |
           set -o pipefail
           MODEL_ID="${{ github.event.inputs.model_id }}"
-          # Cactus-Compute repos ship only CQ weights; the converter loads the
-          # stock Qwen/Qwen3-0.6B model for graph capture, weights come from the CQ dir.
-          python scripts/transpile_bundle.py /tmp/weights /tmp/bundle --model-id "$MODEL_ID" --source-model "Qwen/Qwen3-0.6B" 2>&1 | tail -30
+          SOURCE_MODEL="${{ github.event.inputs.source_model }}"
+          # Cactus-Compute -cq repos ship only CQ weights; the converter loads the
+          # stock source model for graph capture, weights come from the CQ dir.
+          python scripts/transpile_bundle.py /tmp/weights /tmp/bundle --model-id "$MODEL_ID" --source-model "$SOURCE_MODEL" 2>&1 | tail -30
           echo "Bundle contents:"
           ls -la /tmp/bundle/
           test -f /tmp/bundle/components/manifest.json && echo "✓ manifest.json present" || echo "✗ manifest.json MISSING"
